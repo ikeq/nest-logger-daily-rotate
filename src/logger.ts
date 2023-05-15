@@ -99,13 +99,15 @@ export class Logger {
     this.loggers = {
       winston: createLogger({
         transports: [
-          new DailyRotateFile({
-            filename: options.filename as any,
-            dirname: options.dirname,
-            format: getFormat(this.logEntries),
-            ...options,
-            level: 'silly',
-          }),
+          options.filename && options.dirname
+            ? new DailyRotateFile({
+                filename: options.filename as any,
+                dirname: options.dirname,
+                format: getFormat(this.logEntries),
+                ...options,
+                level: 'silly',
+              })
+            : [],
           options.http
             ? new HttpTransport({
                 format: getFormat(this.logEntries, options.http.payload),
