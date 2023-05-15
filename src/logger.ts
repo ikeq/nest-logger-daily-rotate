@@ -3,12 +3,13 @@ import * as DailyRotateFile from 'winston-daily-rotate-file';
 import { LoggerService, ConsoleLogger, LogLevel } from '@nestjs/common';
 import { pick, isEmpty, omit } from 'lodash';
 import { Request } from 'express';
+import { HttpTransport, HttpTransportOptions } from './http';
 
 const defauleLogEntries = [
-  'level',
-  'message',
   'timestamp',
+  'level',
   'context',
+  'message',
   'trace',
   'ip',
   'ua',
@@ -45,11 +46,31 @@ function filterEmpty<T extends object>(obj: T) {
   }, {} as T);
 }
 
-export type ConstructOptions = DailyRotateFile.DailyRotateFileTransportOptions & {
-  context?: string;
-  level?: LogLevel;
-  logEntries?: LogEntry[];
-};
+function getFormat(
+  logEntries: LogEntry[],
+  fn?: (payload: LoggerContext) => any,
+) {
+  return format.combine(
+    format.timestamp({ format: () => +new Date() as any }),
+    format.printf((obj) => {
+      obj.level = getNestLevel(obj.level);
+      obj.ip = obj.ip || '::1';
+      const payload = {
+        ...pick(obj, logEntries),
+        ...omit(obj, defauleLogEntries),
+      };
+      return JSON.stringify(fn ? fn(payload) : payload);
+    }),
+  );
+}
+
+export type ConstructOptions =
+  DailyRotateFile.DailyRotateFileTransportOptions & {
+    context?: string;
+    level?: LogLevel;
+    logEntries?: LogEntry[];
+    http?: HttpTransportOptions;
+  };
 
 export type LogEntry = (typeof defauleLogEntries)[number];
 
@@ -73,32 +94,29 @@ export class Logger {
   private logEntries: LogEntry[];
 
   constructor(options: ConstructOptions, private context?: LoggerContext) {
+    this.logEntries = options.logEntries || (defauleLogEntries as any);
+    this.setLevel(options.level);
     this.loggers = {
       winston: createLogger({
         transports: [
           new DailyRotateFile({
             filename: options.filename as any,
             dirname: options.dirname,
-            format: format.combine(
-              format.timestamp(),
-              format.printf((obj) => {
-                obj.level = getNestLevel(obj.level);
-                return JSON.stringify({
-                  ...pick(obj, this.logEntries),
-                  ...omit(obj, defauleLogEntries),
-                });
-              }),
-            ),
+            format: getFormat(this.logEntries),
             ...options,
             level: 'silly',
           }),
-        ],
+          options.http
+            ? new HttpTransport({
+                format: getFormat(this.logEntries, options.http.payload),
+                ...options.http,
+                level: 'silly',
+              })
+            : [],
+        ].flat(),
       }),
       nest: new ConsoleLogger(),
     };
-
-    this.logEntries = options.logEntries || (defauleLogEntries as any);
-    this.setLevel(options.level);
   }
 
   static getContext(
@@ -116,17 +134,27 @@ export class Logger {
     });
   }
 
-  all(message: any, level: LogLevel, context?: LoggerContext, trace?: string): any {
+  all(
+    message: any,
+    level: LogLevel,
+    context?: LoggerContext,
+    trace?: string,
+  ): any {
     context = {
       ...this.context,
-      ...(typeof context === 'object' ? context : ({ context: context } as any)),
+      ...(typeof context === 'object'
+        ? context
+        : ({ context: context } as any)),
     } as LoggerContext;
 
     if (levelPriorities[level] > levelPriorities[this.level]) {
       return;
     }
 
-    (this.loggers.nest[level] as any)(message.message || message, context.context);
+    (this.loggers.nest[level] as any)(
+      message.message || message,
+      context.context,
+    );
 
     const winstonLevel = getWinstonLevel(level);
 
