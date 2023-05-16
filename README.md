@@ -1,6 +1,6 @@
 # nest-logger-daily-rotate
 
-Enhancing nest's default logger with winston-daily-rotate-file
+Enhance nest's default logger with winston-daily-rotate-file
 
 ## Quick start
 
@@ -13,7 +13,13 @@ import { LoggerModule } from 'nest-logger-daily-rotate';
 @Module({
   imports: [
     LoggerModule.forRoot({
+      context(request) {
+        return {
+          url: request.originalUrl,
+        };
+      },
       level: 'log',
+      dirname: './logs',
       filename: 'application-%DATE%.log',
     }),
   ],
@@ -67,7 +73,7 @@ export class ExceptionFilter {
       e.message,
       e.stack,
       // Pass full context manually
-      Logger.getContext('Context', ctx.getRequest()),
+      this.logger.getContext('Context', ctx.getRequest()),
     );
 
     // ...
@@ -75,21 +81,24 @@ export class ExceptionFilter {
 }
 ```
 
-### Replace the Nest logger
+### Work with middlewares
 
 ```ts
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { Logger } from 'nest-logger-daily-rotate';
+import { NestModule } from '@nestjs/common';
+import { LoggerModule } from 'nest-logger-daily-rotate';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    bufferLogs: true,
-  });
-  app.useLogger(app.get(Logger));
-  await app.listen(3000);
+@Module()
+export class AppModule implements NestModule {
+  constructor(private logger: Logger) {}
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply((request, response, next) => {
+        this.logger.log(req.url, this.logger.getContext('Request', request));
+        next();
+      })
+      .forRoutes('*');
+  }
 }
-bootstrap();
 ```
 
 ## Options
@@ -98,21 +107,8 @@ bootstrap();
 import * as DailyRotateFile from 'winston-daily-rotate-file';
 
 type ConstructOptions = DailyRotateFile.DailyRotateFileTransportOptions & {
-  context?: string;
+  context?: string | ((request: Request) => object);
   level?: 'log' | 'error' | 'warn' | 'debug' | 'verbose';
-  logEntries?: Array<
-    | 'level'
-    | 'ip'
-    | 'body'
-    | 'method'
-    | 'query'
-    | 'url'
-    | 'message'
-    | 'timestamp'
-    | 'context'
-    | 'trace'
-    | 'ua'
-  >;
   http?: {
     url: string;
     auth?: {
@@ -121,7 +117,7 @@ type ConstructOptions = DailyRotateFile.DailyRotateFileTransportOptions & {
       bearer?: string | undefined;
     };
     headers?: Record<string, any>;
-    payload?: (payload: LoggerContext) => any;
+    payload?: (payload: { context?: string; [name: string]: any }) => any;
   };
 };
 ```

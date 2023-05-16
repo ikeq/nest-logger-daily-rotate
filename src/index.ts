@@ -1,10 +1,11 @@
-import { DynamicModule, Inject } from '@nestjs/common';
+import { DynamicModule, Inject, Injectable, Scope } from '@nestjs/common';
 import { INQUIRER, REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { ConstructOptions, Logger, LoggerContext } from './logger';
 
 export { Logger };
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class LoggerService {
   constructor(
     @Inject(REQUEST) private request: Request,
@@ -19,7 +20,7 @@ export class LoggerService {
       context.context = this.inquier?.constructor.name;
     }
 
-    return Logger.getContext(context, this.request);
+    return this.logger.getContext(context, this.request);
   }
 
   log(message: any, context?: any) {
@@ -44,8 +45,10 @@ export class LoggerService {
 }
 
 export class LoggerModule {
-  static forRoot(options: ConstructOptions): DynamicModule {
-    const logger = new Logger(options);
+  static forRoot(
+    options: ConstructOptions | (() => ConstructOptions),
+  ): DynamicModule {
+    let logger: Logger;
 
     return {
       global: true,
@@ -53,7 +56,14 @@ export class LoggerModule {
       providers: [
         {
           provide: Logger,
-          useValue: logger,
+          useFactory: () => {
+            if (!logger) {
+              logger = new Logger(
+                typeof options === 'function' ? options() : options,
+              );
+            }
+            return logger;
+          },
         },
         LoggerService,
       ],

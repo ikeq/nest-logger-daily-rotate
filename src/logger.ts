@@ -1,23 +1,9 @@
 import winston, { createLogger, format } from 'winston';
 import * as DailyRotateFile from 'winston-daily-rotate-file';
 import { LoggerService, ConsoleLogger, LogLevel } from '@nestjs/common';
-import { pick, isEmpty, omit } from 'lodash';
+import { isEmpty } from 'lodash';
 import { Request } from 'express';
 import { HttpTransport, HttpTransportOptions } from './http';
-
-const defauleLogEntries = [
-  'timestamp',
-  'level',
-  'context',
-  'message',
-  'trace',
-  'ip',
-  'ua',
-  'method',
-  'url',
-  'query',
-  'body',
-] as const;
 
 const levelPriorities = {
   error: 0,
@@ -46,42 +32,25 @@ function filterEmpty<T extends object>(obj: T) {
   }, {} as T);
 }
 
-function getFormat(
-  logEntries: LogEntry[],
-  fn?: (payload: LoggerContext) => any,
-) {
+function getFormat(fn?: (payload: LoggerContext) => any) {
   return format.combine(
     format.timestamp({ format: () => +new Date() as any }),
-    format.printf((obj) => {
+    format.printf((obj: any) => {
       obj.level = getNestLevel(obj.level);
-      obj.ip = obj.ip || '::1';
-      const payload = {
-        ...pick(obj, logEntries),
-        ...omit(obj, defauleLogEntries),
-      };
-      return JSON.stringify(fn ? fn(payload) : payload);
+      return JSON.stringify(fn ? fn(obj) : obj);
     }),
   );
 }
 
 export type ConstructOptions =
   DailyRotateFile.DailyRotateFileTransportOptions & {
-    context?: string;
+    context?: string | ((request: Request) => object);
     level?: LogLevel;
-    logEntries?: LogEntry[];
     http?: HttpTransportOptions;
   };
 
-export type LogEntry = (typeof defauleLogEntries)[number];
-
 export interface LoggerContext {
   context?: string;
-  ip?: string;
-  ua?: string;
-  method?: string;
-  url?: string;
-  query?: any;
-  body?: any;
   [name: string]: any;
 }
 
@@ -91,10 +60,11 @@ export class Logger {
     nest: LoggerService;
   };
   private level: LogLevel = 'verbose';
-  private logEntries: LogEntry[];
 
-  constructor(options: ConstructOptions, private context?: LoggerContext) {
-    this.logEntries = options.logEntries || (defauleLogEntries as any);
+  constructor(
+    private options: ConstructOptions,
+    private context?: LoggerContext,
+  ) {
     this.setLevel(options.level);
     this.loggers = {
       winston: createLogger({
@@ -103,14 +73,14 @@ export class Logger {
             ? new DailyRotateFile({
                 filename: options.filename as any,
                 dirname: options.dirname,
-                format: getFormat(this.logEntries),
+                format: getFormat(),
                 ...options,
                 level: 'silly',
               })
             : [],
           options.http
             ? new HttpTransport({
-                format: getFormat(this.logEntries, options.http.payload),
+                format: getFormat(options.http.payload),
                 ...options.http,
                 level: 'silly',
               })
@@ -121,24 +91,26 @@ export class Logger {
     };
   }
 
-  static getContext(
+  getContext(
     context: string | { context?: string; [name: string]: any },
-    request: Request,
+    request?: Request,
   ): LoggerContext {
-    return filterEmpty({
-      ...(typeof context === 'object' ? context : { context }),
-      ip: request.ip,
-      ua: request.get('user-agent'),
-      method: request.method,
-      url: request.originalUrl,
-      query: request.query,
-      body: request.body,
-    });
+    const userContext = ((typeof this.options.context === 'function'
+      ? this.options.context(request || ({} as any))
+      : { context: this.options.context }) || {}) as LoggerContext;
+
+    if (typeof context === 'object') {
+      Object.assign(userContext, context);
+    } else if (context) {
+      userContext.context = context;
+    }
+
+    return filterEmpty(userContext);
   }
 
   all(
-    message: any,
     level: LogLevel,
+    message: any,
     context?: LoggerContext,
     trace?: string,
   ): any {
@@ -182,22 +154,22 @@ export class Logger {
   }
 
   error(message: any, trace?: string, context?: LoggerContext) {
-    this.all(message, 'error', context, trace);
+    this.all('error', message, context, trace);
   }
 
   log(message: any, context?: LoggerContext) {
-    this.all(message, 'log', context);
+    this.all('log', message, context);
   }
 
   warn(message: any, context?: LoggerContext) {
-    this.all(message, 'warn', context);
+    this.all('warn', message, context);
   }
 
   debug(message: any, context?: LoggerContext) {
-    this.all(message, 'debug', context);
+    this.all('debug', message, context);
   }
 
   verbose(message: any, context?: LoggerContext) {
-    this.all(message, 'verbose', context);
+    this.all('verbose', message, context);
   }
 }
