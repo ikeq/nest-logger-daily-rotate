@@ -13,7 +13,8 @@ import { LoggerModule } from 'nest-logger-daily-rotate';
 @Module({
   imports: [
     LoggerModule.forRoot({
-      // ConstructOptions
+      level: 'log',
+      filename: 'application-%DATE%.log',
     }),
   ],
 })
@@ -46,7 +47,12 @@ export class CatsController {
 ### Inject into exception filters
 
 ```ts
-import { Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { Logger } from 'nest-logger-daily-rotate';
 
@@ -107,6 +113,16 @@ type ConstructOptions = DailyRotateFile.DailyRotateFileTransportOptions & {
     | 'trace'
     | 'ua'
   >;
+  http?: {
+    url: string;
+    auth?: {
+      username?: string | undefined;
+      password?: string | undefined;
+      bearer?: string | undefined;
+    };
+    headers?: Record<string, any>;
+    payload?: (payload: LoggerContext) => any;
+  };
 };
 ```
 

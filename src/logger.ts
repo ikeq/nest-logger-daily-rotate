@@ -149,14 +149,14 @@ export class Logger {
         : ({ context: context } as any)),
     } as LoggerContext;
 
-    if (levelPriorities[level] > levelPriorities[this.level]) {
-      return;
-    }
+    if (levelPriorities[level] > levelPriorities[this.level]) return;
 
     (this.loggers.nest[level] as any)(
       message.message || message,
       context.context,
     );
+
+    if (!this.loggers.winston.transports.length) return;
 
     const winstonLevel = getWinstonLevel(level);
 
