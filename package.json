@@ -1,6 +1,6 @@
 {
   "name": "nest-logger-daily-rotate",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "license": "MIT",
   "description": "Enhance nest's default logger with winston-daily-rotate-file",
   "keywords": [

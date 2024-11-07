@@ -11,7 +11,7 @@ const levelPriorities = {
   log: 2,
   debug: 3,
   verbose: 4,
-};
+} as any;
 
 function getWinstonLevel(level: LogLevel) {
   return level === 'log' ? 'info' : level;
@@ -44,7 +44,7 @@ function getFormat(fn?: (payload: LoggerContext) => any) {
 
 export type ConstructOptions =
   DailyRotateFile.DailyRotateFileTransportOptions & {
-    context?: string | ((request: Request) => object);
+    context?: string | ((request?: Request) => object);
     level?: LogLevel;
     http?: HttpTransportOptions;
   };
@@ -96,7 +96,7 @@ export class Logger {
     request?: Request,
   ): LoggerContext {
     const userContext = ((typeof this.options.context === 'function'
-      ? this.options.context(request || ({} as any))
+      ? this.options.context(request)
       : { context: this.options.context }) || {}) as LoggerContext;
 
     if (typeof context === 'object') {
